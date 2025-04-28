@@ -1,0 +1,55 @@
+# Archivos de Python generados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+sdist/
+wheels/
+*.whl
+MANIFEST
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+envs/
+ENV/
+conda/
+anaconda/
+*.conda
+
+# Archivos de desarrollo y herramientas
+.idea/
+.vscode/
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+
+# Archivos de datos (puedes comentar o eliminar si necesitas versionarlos)
+# *.csv
+# *.txt
+# *.json
+# *.xml
+# *.npy
+# *.npz
+# *.pkl
+# *.h5
+
+# Archivos específicos de OpenCV (si aplica)
+# Puedes agregar patrones específicos si OpenCV genera archivos temporales grandes
+# o archivos de caché que no necesitas versionar.
+
+# Archivos generados por herramientas de construcción o empaquetamiento
+# Si usas herramientas como PyInstaller o cx_Freeze
+# *.spec
+# build/
+# dist/
+
+# Otros archivos o directorios que quieras ignorar
+# ejemplo_carpeta_temporal/
+# archivo_de_configuracion_local.ini
