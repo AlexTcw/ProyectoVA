@@ -11,6 +11,8 @@ wheels/
 *.whl
 MANIFEST
 
+.idea
+
 # Entornos virtuales
 .venv/
 venv/
