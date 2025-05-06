@@ -1,127 +1,136 @@
 import cv2
+import numpy as np
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+import matplotlib.pyplot as plt
 import os
 
-import numpy as np
-
 DEFAULT_IMAGE_PATH = "resources/img/"
-N_REGIONS = 4
 
 def load_image(image_name):
     image_path = os.path.join(DEFAULT_IMAGE_PATH, image_name)
-    print("Loading image:", image_path)
-
+    print(f"Loading image: {image_path}")
     image = cv2.imread(image_path)
     if image is None:
-        print("Error: No se pudo cargar la imagen. Verifica la ruta.")
-
+        raise FileNotFoundError(f"Error: No se pudo cargar la imagen '{image_name}'. Verifica la ruta.")
     return image
 
-def image_to_matrix(image):
-    print("Converting image to matrix")
-    if image is None:
-        print("Error: No hay imagen para mostrar.")
-        return None
-    else:
-        return np.array(image)
+def preprocess_image(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    sobel_magnitude = cv2.magnitude(sobel_x, sobel_y)
+    _, sobel_threshold = cv2.threshold(sobel_magnitude, 100, 255, cv2.THRESH_BINARY)
+    return sobel_threshold
 
-def show_images(images):
-    if not images:
-        print("Error: No hay imagenes para mostrar.")
-        return
-    for image, window_name, width, height in images:
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(window_name, width, height)
-        cv2.imshow(window_name, image)
+def dilate_image(binary_image, kernel_size=(4, 4)):
+    if binary_image.dtype != np.uint8:
+         binary_image = binary_image.astype(np.uint8)
+    kernel = np.ones(kernel_size, np.uint8)
+    dilated_image = cv2.dilate(binary_image, kernel, iterations=1)
+    return dilated_image
 
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+def erode_image(binary_image, kernel_size=(5, 5)):
+    if binary_image.dtype != np.uint8:
+         binary_image = binary_image.astype(np.uint8)
+    kernel = np.ones(kernel_size, np.uint8)
+    eroded_image = cv2.erode(binary_image, kernel, iterations=1)
+    return eroded_image
 
-def matrix_to_image(matrix, output_path=None):
-    if matrix is None:
-        print("Error: La matriz no es válida.")
-        return None
+def morphological_opening(binary_image, kernel_size=(5, 5)):
+    if binary_image.dtype != np.uint8:
+         binary_image = binary_image.astype(np.uint8)
+    kernel = np.ones(kernel_size, np.uint8)
+    eroded_image = cv2.erode(binary_image, kernel, iterations=1)
+    opened_image = cv2.dilate(eroded_image, kernel, iterations=1)
+    return opened_image
 
-    # Normalizar la matriz si es de tipo float (convertir a valores entre 0 y 255)
-    if matrix.dtype == np.float32 or matrix.dtype == np.float64:
-        matrix = np.clip(matrix, 0, 255).astype(np.uint8)
+# --- Nueva función para aislar caracteres usando Componentes Conectados ---
+def isolate_characters(binary_image, min_area_ratio=0.001, max_area_ratio=0.08,
+                      min_width_ratio=0.01, max_width_ratio=0.15,
+                      min_height_ratio=0.05, max_height_ratio=0.4,
+                      min_aspect_ratio=0.2, max_aspect_ratio=5.0):
+    if binary_image.dtype != np.uint8:
+         binary_image = binary_image.astype(np.uint8)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, 8, cv2.CV_32S)
+    output_img = np.zeros_like(binary_image)
 
-    # Guardar la imagen si se especifica una ruta
-    if output_path:
-        cv2.imwrite(output_path, matrix)
+    img_height, img_width = binary_image.shape[:2]
+    total_area = img_height * img_width
+    min_area = total_area * min_area_ratio
+    max_area = total_area * max_area_ratio
+    min_width = img_width * min_width_ratio
+    max_width = img_width * max_width_ratio
+    min_height = img_height * min_height_ratio
+    max_height = img_height * max_height_ratio
+    chars_kept = 0
+    for i in range(1, num_labels):
+        area = stats[i, cv2.CC_STAT_AREA]
+        left = stats[i, cv2.CC_STAT_LEFT]
+        top = stats[i, cv2.CC_STAT_TOP]
+        width = stats[i, cv2.CC_STAT_WIDTH]
+        height = stats[i, cv2.CC_STAT_HEIGHT]
+        aspect_ratio = height / width if width > 0 else 0
+        is_potential_character = False
+        if area >= min_area and area <= max_area:
+             if width >= min_width and width <= max_width and \
+                height >= min_height and height <= max_height:
+                 if aspect_ratio >= min_aspect_ratio and aspect_ratio <= max_aspect_ratio:
 
-    return matrix
+                     is_potential_character = True
 
-def convert_to_bw(matrix):
-    print("Converting matrix to black and white")
+        if is_potential_character:
+            chars_kept += 1
 
-    if matrix is None:
-        print("Error: No hay imagen para procesar.")
-        return None
+    return output_img
 
-    height, width, _ = matrix.shape
-    bw_matrix = np.zeros((height, width), dtype=np.uint8)
-
-    for i in range(height):
-        for j in range(width):
-            r, g, b = matrix[i][j]
-            gray = (r * 0.3 + g * 0.59 + b * 0.11)  # Conversión a escala de grises
-            bw_matrix[i][j] = 255 if gray > 128 else 0  # Binarización manual
-
-    return bw_matrix
-
-def compute_histogram(matrix):
-    """Calcula el histograma de la imagen manualmente."""
-    height, width = matrix.shape
-    histogram = np.zeros(256, dtype=int)
-
-    for i in range(height):
-        for j in range(width):
-            intensity = matrix[i, j]
-            histogram[intensity] += 1
-
-    return histogram
-
-def find_thresholds(histogram, n_regions):
-    """Encuentra N-1 umbrales dividiendo el histograma en regiones de igual área."""
-    total_pixels = sum(histogram)
-    region_size = total_pixels // n_regions
-    thresholds = []
-
-    accumulated = 0
-    for i in range(256):
-        accumulated += histogram[i]
-        if accumulated >= (len(thresholds) + 1) * region_size:
-            thresholds.append(i)
-
-    return thresholds
-
-def apply_segmentation(matrix, thresholds):
-    """Segmenta la imagen asignando niveles de gris según los umbrales."""
-    segmented = np.zeros_like(matrix, dtype=np.uint8)
-    regions = len(thresholds) + 1
-
-    for i in range(matrix.shape[0]):
-        for j in range(matrix.shape[1]):
-            pixel = matrix[i, j]
-            for t in range(len(thresholds)):
-                if pixel <= thresholds[t]:
-                    segmented[i, j] = (255 // (regions - 1)) * t
-                    break
-            else:
-                segmented[i, j] = 255  # Última región
-
-    return segmented
-
+def quitar_puntos_blancos(imagen_binaria, tamaño_kernel=3):
+    kernel = np.ones((tamaño_kernel, tamaño_kernel), np.uint8)
+    imagen_limpia = cv2.morphologyEx(imagen_binaria, cv2.MORPH_OPEN, kernel)
+    return imagen_limpia
 
 def main():
-    src_img = load_image("Car-plate.jpeg")
-    src_matrix = image_to_matrix(src_img)
-    bw_matrix = convert_to_bw(src_matrix)
-    histogram = compute_histogram(bw_matrix)
-    thresholds = find_thresholds(histogram, N_REGIONS)
-    segmented_img = apply_segmentation(bw_matrix, thresholds)
-    dst_img = matrix_to_image(segmented_img)
-    show_images([(src_img,"src",1000,600),(dst_img,"dst",1000,600)])
+    try:
+        img = load_image("Car-plate.jpeg")
+        img = preprocess_image(img)
+        img = dilate_image(img, kernel_size=(10, 10))
+        img = morphological_opening(img,20)
+        img = dilate_image(img, kernel_size=(3, 3))
+
+
+        isolated_chars_img = isolate_characters(
+            img,
+            min_area_ratio=0.0004,
+            max_area_ratio=0.08,
+            min_width_ratio=0.005,
+            max_width_ratio=0.1,
+            min_height_ratio=0.02,
+            max_height_ratio=0.2,
+            min_aspect_ratio=0.1,
+            max_aspect_ratio=10.0
+        )
+
+        plt.figure(figsize=(15, 7))
+
+        plt.subplot(1, 2, 1)
+        plt.imshow(img, cmap='gray')
+        plt.title('Imagen Binaria Procesada')
+        plt.axis('off')
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(isolated_chars_img, cmap='gray')
+        plt.title('Caracteres Aislados')
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+    except FileNotFoundError as e:
+        print(e)
+    except Exception as e:
+        print(f"Ocurrió un error: {e}")
+
+
 
 if __name__ == '__main__':
     main()
